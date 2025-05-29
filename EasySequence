@@ -1,0 +1,83 @@
+// Pins for LEDs (in order: A4 → 10, A5 → 9, A3 → 11)
+int ledPins[3] = {10, 9, 11};
+// Pins for Piezo sensors (in order: A4, A5, A3)
+int piezoPins[3] = {A4, A5, A3};
+// Thresholds for strike detection (one per piezo)
+int thresholds[3] = {250, 50, 50};
+
+
+
+int pattern[] = {0, 1, 0, 2, 0, 1, 2, 0, 0, 1, 2, 2, 0, 1, 0, 2}; // 0-based indexes
+const int patternLength = sizeof(pattern) / sizeof(pattern[0]);
+int currentStep = 0;
+
+unsigned long ledOnTime = 0;
+bool ledActive = false;
+bool gameOver = false;
+bool gameWon = false;
+bool flashState = false;
+unsigned long lastFlashTime = 0;
+
+void setup() {
+  Serial.begin(9600);
+  for (int i = 0; i < 3; i++) {
+    pinMode(ledPins[i], OUTPUT);
+    digitalWrite(ledPins[i], LOW);
+  }
+  randomSeed(analogRead(0));
+}
+
+void loop() {
+  unsigned long currentTime = millis();
+
+  // Flash all LEDs on and off if game over
+  if (gameOver) {
+    if (currentTime - lastFlashTime >= 500) {
+      flashState = !flashState;
+      for (int i = 0; i < 3; i++) {
+        digitalWrite(ledPins[i], flashState ? HIGH : LOW);
+      }
+      lastFlashTime = currentTime;
+    }
+    return;
+  }
+
+  // If game won, keep all LEDs on
+  if (gameWon) {
+    for (int i = 0; i < 3; i++) {
+      digitalWrite(ledPins[i], HIGH);
+    }
+    return;
+  }
+
+  // Turn on next LED if none are active
+  if (!ledActive) {
+    if (currentStep < patternLength) {
+      int ledIndex = pattern[currentStep];
+      digitalWrite(ledPins[ledIndex], HIGH);
+      ledOnTime = currentTime;
+      ledActive = true;
+    } else {
+      gameWon = true;
+      return;
+    }
+  }
+
+  // Time ran out?
+  if (ledActive && currentTime - ledOnTime > 2500) {
+    gameOver = true;
+    return;
+  }
+
+  // Check for knock on correct piezo
+  if (ledActive) {
+    int ledIndex = pattern[currentStep];
+    int sensorValue = analogRead(piezoPins[ledIndex]);
+    if (sensorValue >= thresholds[ledIndex]) {
+      digitalWrite(ledPins[ledIndex], LOW);
+      ledActive = false;
+      currentStep++;
+      delay(250); // short delay before next LED
+    }
+  }
+}
